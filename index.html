@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Timer</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱</text></svg>">
+  <script>
+    try { const t = localStorage.getItem('vt:theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">⏱</span> Video Timer</div>
+    <div class="seg" role="group" aria-label="Layout">
+      <button id="singleBtn" class="seg-btn" title="One video (D)">One video</button>
+      <button id="dualBtn" class="seg-btn" title="Two videos side by side (D)">Two videos</button>
+    </div>
+    <button id="syncBtn" class="btn toggle" title="Sync: frame steps, jumps and play/pause apply to both videos (S)" hidden>⛓ Sync</button>
+    <div class="spacer"></div>
+    <button id="helpBtn" class="btn icon" title="Keyboard shortcuts (?)">?</button>
+    <button id="themeBtn" class="btn icon" title="Toggle theme (T)">◐</button>
+  </header>
+
+  <main class="panes" id="panes"></main>
+  <input id="fileInput" type="file" accept="video/*,.mkv,.mov,.m4v,.mp4,.webm" hidden>
+
+  <template id="paneTpl">
+    <div class="pane">
+      <section class="stage">
+        <div class="pane-head">
+          <span class="pane-tag"></span>
+          <span class="file-name muted">No video</span>
+          <div class="spacer"></div>
+          <button class="btn small open-btn" title="Open a video in this panel">Open video…</button>
+        </div>
+        <div class="video-wrap">
+          <video playsinline preload="auto"></video>
+          <div class="drop">
+            <div class="drop-inner">
+              <div class="drop-icon">🎞️</div>
+              <div class="drop-title">Drop a video here</div>
+              <div class="drop-sub">or click to choose a file. Everything stays on your computer.</div>
+            </div>
+          </div>
+          <div class="overlay-msg" hidden></div>
+        </div>
+
+        <div class="readout">
+          <div class="tc-block">
+            <label>Current frame time</label>
+            <input class="timecode" value="00:00:00.000" spellcheck="false" autocomplete="off" aria-label="Current frame time"
+                   title="Click (or press G) to type a time such as 1:02:03.456, 75.5 or f1200 for a frame number">
+          </div>
+          <div class="stats">
+            <div class="stat"><label>Frame</label><div><span class="frame-num mono">–</span> <span class="muted">/ <span class="frame-count mono">–</span></span></div></div>
+            <div class="stat"><label>Frame rate</label><button class="link mono fps-btn" title="Click to override frame rate">–</button><div class="fps-info muted small"></div></div>
+            <div class="stat"><label>Duration</label><div class="dur-text mono">–</div><div class="media-info muted small"></div></div>
+          </div>
+        </div>
+
+        <div class="timeline" aria-label="Timeline">
+          <div class="tl-track"></div>
+          <div class="tl-spans"></div>
+          <div class="tl-playhead"></div>
+          <div class="tl-hover" hidden></div>
+        </div>
+
+        <div class="transport">
+          <button class="btn" data-sec="-60" title="Back 1 minute (Shift+↓)">−1m</button>
+          <button class="btn" data-sec="-10" title="Back 10 seconds (↓)">−10s</button>
+          <button class="btn" data-sec="-1" title="Back 1 second (J / Ctrl+←)">−1s</button>
+          <button class="btn" data-frames="-10" title="Back 10 frames (Shift+←)">−10f</button>
+          <button class="btn" data-frames="-1" title="Back 1 frame (← or ,)">−1f</button>
+          <button class="btn play" title="Play / pause (Space or K)">▶</button>
+          <button class="btn" data-frames="1" title="Forward 1 frame (→ or .)">+1f</button>
+          <button class="btn" data-frames="10" title="Forward 10 frames (Shift+→)">+10f</button>
+          <button class="btn" data-sec="1" title="Forward 1 second (L / Ctrl+→)">+1s</button>
+          <button class="btn" data-sec="10" title="Forward 10 seconds (↑)">+10s</button>
+          <button class="btn" data-sec="60" title="Forward 1 minute (Shift+↑)">+1m</button>
+          <select class="btn rate-sel" title="Playback speed">
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>Timespans</h2>
+          <button class="btn primary add-span" title="New timespan starting at the current frame (N)">+ New <kbd>N</kbd></button>
+        </div>
+        <div class="panel-hint muted small">
+          <kbd>N</kbd> new span · <kbd>I</kbd> set start · <kbd>O</kbd> set end · <kbd>Alt</kbd>+<kbd>↑↓</kbd> switch span
+        </div>
+        <div class="span-list"></div>
+        <div class="panel-foot">
+          <button class="btn copy-all">Copy all</button>
+          <button class="btn csv">Export CSV</button>
+          <div class="spacer"></div>
+          <button class="btn danger-text clear">Clear</button>
+        </div>
+      </aside>
+    </div>
+  </template>
+
+  <dialog id="helpDlg">
+    <form method="dialog">
+      <h3>Keyboard shortcuts</h3>
+      <div class="keys">
+        <div><kbd>←</kbd> <kbd>→</kbd> or <kbd>,</kbd> <kbd>.</kbd></div><div>Previous / next frame</div>
+        <div><kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd></div><div>Back / forward 10 frames</div>
+        <div><kbd>J</kbd> <kbd>L</kbd> or <kbd>Ctrl</kbd>+<kbd>←</kbd> <kbd>→</kbd></div><div>Back / forward 1 second</div>
+        <div><kbd>↓</kbd> <kbd>↑</kbd></div><div>Back / forward 10 seconds</div>
+        <div><kbd>Shift</kbd>+<kbd>↓</kbd> <kbd>↑</kbd></div><div>Back / forward 1 minute</div>
+        <div><kbd>PgDn</kbd> <kbd>PgUp</kbd></div><div>Back / forward 10 minutes</div>
+        <div><kbd>Home</kbd> <kbd>End</kbd></div><div>First / last frame</div>
+        <div><kbd>Space</kbd> or <kbd>K</kbd></div><div>Play / pause</div>
+        <div><kbd>G</kbd></div><div>Go to a time (e.g. <code>1:02:03.456</code>, <code>75.5</code>, <code>f1200</code>)</div>
+        <div class="sep"></div><div class="sep"></div>
+        <div><kbd>N</kbd></div><div>New timespan, starting at the current frame</div>
+        <div><kbd>I</kbd> or <kbd>[</kbd></div><div>Set start of the active span to the current frame</div>
+        <div><kbd>O</kbd> or <kbd>]</kbd></div><div>Set end of the active span to the current frame</div>
+        <div><kbd>Shift</kbd>+<kbd>I</kbd> / <kbd>O</kbd></div><div>Jump to the active span's start / end</div>
+        <div><kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></div><div>Select previous / next span</div>
+        <div><kbd>F2</kbd></div><div>Rename the active span</div>
+        <div><kbd>Del</kbd></div><div>Delete the active span</div>
+        <div class="sep"></div><div class="sep"></div>
+        <div><kbd>D</kbd></div><div>Toggle one / two videos</div>
+        <div><kbd>1</kbd> <kbd>2</kbd></div><div>Select left / right video (keys act on the selected one)</div>
+        <div><kbd>S</kbd></div><div>Sync: navigation and play/pause apply to both videos</div>
+        <div><kbd>T</kbd></div><div>Toggle light / dark theme</div>
+        <div><kbd>?</kbd></div><div>Show this help</div>
+      </div>
+      <div class="dlg-actions"><button class="btn primary" value="close">Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="fpsDlg">
+    <form method="dialog">
+      <h3>Frame rate</h3>
+      <p class="muted small" id="fpsDlgInfo"></p>
+      <label class="field">Frames per second
+        <input id="fpsInput" type="number" step="any" min="1" max="1000">
+      </label>
+      <div class="presets" id="fpsPresets"></div>
+      <p class="muted small">Overriding assumes a constant frame rate starting at 0.000.</p>
+      <div class="dlg-actions">
+        <button class="btn" value="reset">Use detected</button>
+        <div class="spacer"></div>
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" value="apply">Apply</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="mp4.js"></script>
+  <script src="webm.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
